@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOSQUITO ZAPPER // MK-III</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/p5.min.js"></script>
+<script>
+  // Must come AFTER the p5 script tag - p5 does not exist before it loads.
+  // Guard anyway so a CDN failure degrades gracefully instead of throwing.
+  if (typeof p5 !== 'undefined') p5.disableFriendlyErrors = true;
+</script>
+<script>
+  // Fallback CDN: if the primary fails, load from unpkg and flag it.
+  window.__p5Fallback = false;
+  window.addEventListener('load', function () {
+    if (typeof p5 === 'undefined') {
+      window.__p5Fallback = true;
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/p5@1.11.3/lib/p5.min.js';
+      s.onload = function () { if (window.p5) p5.disableFriendlyErrors = true; };
+      s.onerror = function () {
+        document.body.innerHTML =
+          '<pre style="color:#ff3366;font:14px monospace;padding:24px">' +
+          'p5.js failed to load from both CDNs.\n' +
+          'Check your network, or vendor p5.min.js locally.</pre>';
+      };
+      document.head.appendChild(s);
+    }
+  });
+</script>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #000; cursor: crosshair; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    font-family: 'Courier New', monospace; font-size: 13px;
+    color: #00ffcc; background: rgba(0,8,4,0.72);
+    border: 1px solid rgba(0,255,204,0.35); border-radius: 6px;
+    padding: 10px 14px; line-height: 1.65; pointer-events: none;
+    text-shadow: 0 0 6px rgba(0,255,204,0.55);
+    box-shadow: 0 0 18px rgba(0,255,204,0.15), inset 0 0 12px rgba(0,255,204,0.06);
+    white-space: pre;
+  }
+  #hud .lbl { color: #5aaa95; }
+  #hud .val { color: #eafff7; font-weight: bold; }
+  #hud .warn { color: #ff3366; text-shadow: 0 0 8px rgba(255,51,102,0.7); }
+  #hud .amber { color: #ffcc00; text-shadow: 0 0 8px rgba(255,204,0,0.6); }
+  #controls {
+    position: fixed; bottom: 12px; left: 12px; z-index: 10;
+    font-family: 'Courier New', monospace; font-size: 11px;
+    color: #4a8a78; background: rgba(0,8,4,0.6);
+    border: 1px solid rgba(0,255,204,0.2); border-radius: 6px;
+    padding: 8px 12px; pointer-events: none; line-height: 1.6;
+  }
+  #controls .key { color: #00ffcc; }
+</style>
+</head>
+<body>
+<div id="hud"></div>
+<div id="controls">
+  <span class="key">[LMB]</span> attract mosquitoes &nbsp;
+  <span class="key">[RMB]</span> repel &nbsp;
+  <span class="key">[SPACE]</span> toggle auto-target &nbsp;
+  <span class="key">[+/-]</span> mosquito count
+</div>
+<script>
+// ============================================================
+// MOSQUITO ZAPPER MK-III
+// A neon cyberpunk mosquito detection & laser zapping sim
+// ============================================================
+
+const CONFIG = {
+  mosquitoCount: 22,
+  trailFade: 0.055,        // lower = longer trails
+  detectRadius: 190,       // px — legacy; superseded by effectiveDetectRadius
+  // Detection radius was originally 190 with the turret at the bottom edge,
+  // which put every mosquito out of range (see fix_detection_geometry below).
+  // The turret now sits mid-field with enough reach to cover the swarm.
+  turretYFraction: 0.72,   // turret sits 72% down the canvas
+  effectiveDetectRadius: 340, // px — reach that actually covers the play area
+  zapCooldown: 0.12,       // seconds between zaps (0.35 let targets escape)
+  lockTimeout: 2.5,        // seconds to hold one lock before re-picking
+  fireTolerance: 0.14,     // rad - beam must be this close to the target to fire
+  laserTurnSpeed: 9.0,     // rad/s turret turn rate
+  laserRange: 900,         // px max laser reach
+  mouseAttractRadius: 260,
+  mouseRepelRadius: 220,
+  mouseForce: 0.9,
+  mosquitoSpeed: [0.7, 1.8],
+  wingBeat: [38, 55],      // Hz range
+};
+
+const PALETTE = {
+  bg:       { h: 210, s: 60, b: 3 },
+  grid:     { h: 180, s: 50, b: 10 },
+  mosquito: { h: 55,  s: 85, b: 95 },
+  trail:    { h: 55,  s: 90, b: 70 },
+  detect:   { h: 160, s: 90, b: 85 },
+  laser:    { h: 330, s: 100, b: 90 },
+  zap:      { h: 45,  s: 100, b: 100 },
+  turret:   { h: 200, s: 80, b: 70 },
+  scan:     { h: 180, s: 70, b: 60 },
+};
+
+// === Global state ===
+let mosquitoes = [];
+let particles = [];
+let ripples = [];
+let scanPulse = 0;
+let scanTarget = -1;
+let scanTimer = 0;
+let autoTarget = true;
+// NOTE: p5 constants (HALF_PI, PI, ...) do NOT exist at script-evaluation time.
+// They are only defined once p5 boots. Using one in a global initializer throws
+// and kills the entire script. Use a literal here and set the real value in
+// setup(). -Math.PI/2 === -HALF_PI.
+let turretAngle = -Math.PI / 2;
+let turretPos;
+let lockedTarget = null;   // persistent auto-target lock (see draw())
+let lockTimer = 0;         // seconds the current lock has been held
+let zapCooldown = 0;
+let stats = { detected: 0, zapped: 0, shots: 0, fps: 0 };
+let fpsSmooth = 60;
+let timeSec = 0;
+let bgBuffer, trailBuffer;
+let gridOffset = 0;
+let mouseMode = 'none'; // 'attract' | 'repel'
+let mouseHeld = false;
+
+// === Mosquito class ===
+class Mosquito {
+  constructor() {
+    this.pos = createVector(random(width), random(height));
+    this.vel = p5.Vector.random2D().mult(random(CONFIG.mosquitoSpeed[0], CONFIG.mosquitoSpeed[1]));
+    this.size = random(2.2, 3.8);
+    this.noiseOffset = createVector(random(1000), random(1000));
+    this.wingPhase = random(TWO_PI);
+    this.wingFreq = random(CONFIG.wingBeat[0], CONFIG.wingBeat[1]);
+    this.detected = false;
+    this.detectPulse = 0;
+    this.id = floor(random(10000));
+    this.life = 1.0;
+    this.flashTimer = 0;
+    this.erraticTimer = 0;
+    this.erraticDir = createVector(0, 0);
+    this.bodyHue = PALETTE.mosquito.h + random(-15, 15);
+  }
+
+  update(dt) {
+    // --- Erratic flight: layered Perlin noise steering ---
+    let n1 = noise(this.noiseOffset.x + timeSec * 0.35, this.noiseOffset.y);
+    let n2 = noise(this.noiseOffset.x, this.noiseOffset.y + timeSec * 0.35 + 100);
+    let steer = createVector(n1 - 0.5, n2 - 0.5).mult(3.2);
+
+    // Random erratic dart every 0.3–1.2s
+    this.erraticTimer -= dt;
+    if (this.erraticTimer <= 0) {
+      this.erraticTimer = random(0.3, 1.2);
+      this.erraticDir = p5.Vector.random2D().mult(random(0.6, 2.2));
+    }
+    steer.add(this.erraticDir);
+
+    // Mouse attract / repel
+    if (mouseHeld) {
+      let toMouse = createVector(mouseX - this.pos.x, mouseY - this.pos.y);
+      let d = toMouse.mag();
+      if (mouseMode === 'attract' && d < CONFIG.mouseAttractRadius && d > 20) {
+        toMouse.normalize().mult(CONFIG.mouseForce * (1 - d / CONFIG.mouseAttractRadius));
+        steer.add(toMouse);
+      } else if (mouseMode === 'repel' && d < CONFIG.mouseRepelRadius) {
+        toMouse.normalize().mult(-CONFIG.mouseForce * 1.6 * (1 - d / CONFIG.mouseRepelRadius));
+        steer.add(toMouse);
+      }
+    }
+
+    // Boundary avoidance
+    let margin = 60;
+    if (this.pos.x < margin) steer.x += (margin - this.pos.x) / margin * 2;
+    if (this.pos.x > width - margin) steer.x -= (this.pos.x - (width - margin)) / margin * 2;
+    if (this.pos.y < margin) steer.y += (margin - this.pos.y) / margin * 2;
+    if (this.pos.y > height - margin) steer.y -= (this.pos.y - (height - margin)) / margin * 2;
+
+    // Separation from other mosquitoes
+    for (let other of mosquitoes) {
+      if (other === this) continue;
+      let d = dist(this.pos.x, this.pos.y, other.pos.x, other.pos.y);
+      if (d < 30 && d > 0.1) {
+        let push = createVector(this.pos.x - other.pos.x, this.pos.y - other.pos.y);
+        push.normalize().mult((30 - d) / 30 * 0.8);
+        steer.add(push);
+      }
+    }
+
+    // Apply the accumulated steering force. `steer` was previously misspelled
+    // as `steed` here, which threw a ReferenceError every single frame and
+    // aborted update() partway through.
+    if (steer.magSq() > 0) {
+      this.vel.add(steer.limit(3.5));
+    }
+    let spd = this.vel.mag();
+    let targetSpd = random(CONFIG.mosquitoSpeed[0], CONFIG.mosquitoSpeed[1]) * (1 + noise(timeSec * 2 + this.noiseOffset.x) * 0.4);
+    this.vel.setMag(lerp(spd, targetSpd, 0.04));
+
+    this.pos.add(createVector(this.vel.x * dt * 60, this.vel.y * dt * 60));
+
+    // Wing animation
+    this.wingPhase += this.wingFreq * dt * TWO_PI;
+
+    // Detection pulse decay
+    this.detectPulse = max(0, this.detectPulse - dt * 2.5);
+    this.flashTimer = max(0, this.flashTimer - dt);
+  }
+
+  display() {
+    let angle = this.vel.heading();
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(angle);
+
+    // Body glow
+    noStroke();
+    let glowSize = this.size * 5;
+    fill(this.bodyHue, 80, 60, 12);
+    ellipse(0, 0, glowSize, glowSize);
+
+    // Body
+    fill(this.bodyHue, 70, 85, 200);
+    noStroke();
+    ellipse(0, 0, this.size * 2.4, this.size * 1.4);
+
+    // Head
+    fill(this.bodyHue, 60, 90, 230);
+    ellipse(this.size * 1.2, 0, this.size * 1.1, this.size * 1.1);
+
+    // Eyes (red glow)
+    fill(0, 100, 90, 255);
+    ellipse(this.size * 1.6, -this.size * 0.35, this.size * 0.4, this.size * 0.4);
+    ellipse(this.size * 1.6, this.size * 0.35, this.size * 0.4, this.size * 0.4);
+
+    // Wings — flutter
+    let wingAngle = sin(this.wingPhase) * 0.9;
+    let wingLen = this.size * 3.2;
+    let wingH = this.size * 0.9;
+    noFill();
+    stroke(this.bodyHue, 40, 80, 90);
+    strokeWeight(0.7);
+
+    // Left wing
+    push();
+    rotate(-wingAngle - 0.3);
+    ellipse(-wingLen * 0.4, -wingH * 0.5, wingLen, wingH);
+    pop();
+    // Right wing
+    push();
+    rotate(wingAngle + 0.3);
+    ellipse(-wingLen * 0.4, wingH * 0.5, wingLen, wingH);
+    pop();
+
+    // Proboscis
+    stroke(this.bodyHue, 50, 70, 180);
+    strokeWeight(0.6);
+    line(this.size * 1.5, 0, this.size * 3.2, 0);
+
+    // Flash on detection
+    if (this.detectPulse > 0) {
+      noStroke();
+      fill(0, 100, 100, this.detectPulse * 60);
+      ellipse(0, 0, this.size * 5, this.size * 5);
+    }
+
+    pop();
+  }
+}
+
+// === Particle (for explosions) ===
+class Particle {
+  constructor(x, y, vx, vy, hue, sat, bri, life, size) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(vx, vy);
+    this.hue = hue;
+    this.sat = sat;
+    this.bri = bri;
+    this.life = life;
+    this.maxLife = life;
+    this.size = size;
+  }
+  update(dt) {
+    this.pos.add(createVector(this.vel.x * dt * 60, this.vel.y * dt * 60));
+    this.vel.mult(0.965);
+    this.vel.y += 0.03; // slight gravity
+    this.life -= dt;
+  }
+  display() {
+    let t = this.life / this.maxLife;
+    noStroke();
+    fill(this.hue + (1 - t) * 40, this.sat, this.bri, t * 220);
+    ellipse(this.pos.x, this.pos.y, this.size * t * 2, this.size * t * 2);
+  }
+}
+
+// === Ripple (expanding ring on zap) ===
+class Ripple {
+  constructor(x, y, hue) {
+    this.pos = createVector(x, y);
+    this.hue = hue;
+    this.life = 0.6;
+    this.maxLife = 0.6;
+    this.maxR = 70;
+  }
+  update(dt) { this.life -= dt; }
+  display() {
+    let t = 1 - this.life / this.maxLife;
+    let r = t * this.maxR;
+    noFill();
+    stroke(this.hue, 100, 100, (1 - t) * 180);
+    strokeWeight(2.5 * (1 - t));
+    ellipse(this.pos.x, this.pos.y, r * 2, r * 2);
+    stroke(this.hue + 30, 100, 100, (1 - t) * 80);
+    strokeWeight(1);
+    ellipse(this.pos.x, this.pos.y, r * 1.3 * 2, r * 1.3 * 2);
+  }
+}
+
+// === Zap explosion ===
+function spawnZapExplosion(x, y, hue) {
+  for (let i = 0; i < 35; i++) {
+    let a = random(TWO_PI);
+    let spd = random(1.5, 6);
+    particles.push(new Particle(
+      x, y,
+      cos(a) * spd, sin(a) * spd - 1,
+      hue + random(-20, 20), 100, 100,
+      random(0.3, 0.9), random(1.5, 4)
+    ));
+  }
+  // Sparks
+  for (let i = 0; i < 12; i++) {
+    let a = random(TWO_PI);
+    let spd = random(5, 12);
+    particles.push(new Particle(
+      x, y,
+      cos(a) * spd, sin(a) * spd,
+      hue + 20, 100, 100,
+      random(0.15, 0.4), random(1, 2.5)
+    ));
+  }
+  ripples.push(new Ripple(x, y, hue));
+}
+
+// === Spawn a mosquito at random edge ===
+function spawnMosquito() {
+  let m = new Mosquito();
+  let edge = floor(random(4));
+  if (edge === 0) { m.pos.set(random(width), -20); }
+  else if (edge === 1) { m.pos.set(width + 20, random(height)); }
+  else if (edge === 2) { m.pos.set(random(width), height + 20); }
+  else { m.pos.set(-20, random(height)); }
+  m.vel = createVector(random(-1, 1), random(-1, 1)).normalize().mult(random(CONFIG.mosquitoSpeed[0], CONFIG.mosquitoSpeed[1]));
+  return m;
+}
+
+// === Draw detection bounding box ===
+function drawDetectBox(m, pulse) {
+  let s = m.size * 7 + pulse * 8;
+  let x = m.pos.x, y = m.pos.y;
+  let a = 0.4 + pulse * 0.6;
+  let hue = PALETTE.detect.h;
+  let cornerLen = 8 + pulse * 4;
+
+  push();
+  strokeWeight(1.5);
+
+  // Fill
+  noFill();
+  fill(hue, 80, 80, 8 + pulse * 20);
+  rect(x - s / 2, y - s / 2, s, s);
+
+  // Corner brackets
+  stroke(hue, 90, 95, a * 255);
+  let c = cornerLen;
+  // TL
+  line(x - s/2, y - s/2, x - s/2 + c, y - s/2);
+  line(x - s/2, y - s/2, x - s/2, y - s/2 + c);
+  // TR
+  line(x + s/2, y - s/2, x + s/2 - c, y - s/2);
+  line(x + s/2, y - s/2, x + s/2, y - s/2 + c);
+  // BL
+  line(x - s/2, y + s/2, x - s/2 + c, y + s/2);
+  line(x - s/2, y + s/2, x - s/2, y + s/2 - c);
+  // BR
+  line(x + s/2, y + s/2, x + s/2 - c, y + s/2);
+  line(x + s/2, y + s/2, x + s/2, y + s/2 - c);
+
+  // Scanning line inside box
+  let scanY = y - s/2 + (sin(timeSec * 4 + m.id) * 0.5 + 0.5) * s;
+  stroke(hue, 100, 100, 60);
+  strokeWeight(0.8);
+  line(x - s/2 + 2, scanY, x + s/2 - 2, scanY);
+
+  // Label
+  noStroke();
+  fill(hue, 80, 90, a * 200);
+  textSize(9);
+  textAlign(LEFT, BOTTOM);
+  text('MQ-' + m.id, x + s/2 + 3, y - s/2 - 2);
+
+  pop();
+}
+
+// === Draw laser beam ===
+function drawLaser(fromX, fromY, toX, toY, intensity) {
+  push();
+  let hue = PALETTE.laser.h;
+
+  // Outer glow
+  noFill();
+  strokeWeight(14);
+  stroke(hue, 100, 60, intensity * 30);
+  line(fromX, fromY, toX, toY);
+  strokeWeight(7);
+  stroke(hue, 100, 75, intensity * 70);
+  line(fromX, fromY, toX, toY);
+
+  // Core beam
+  strokeWeight(2.5);
+  stroke(0, 0, 100, intensity * 230);
+  line(fromX, fromY, toX, toY);
+
+  // Impact glow
+  noStroke();
+  fill(hue, 100, 90, intensity * 120);
+  ellipse(toX, toY, 22 * intensity, 22 * intensity);
+  fill(0, 0, 100, intensity * 200);
+  ellipse(toX, toY, 8 * intensity, 8 * intensity);
+
+  // Random sparks along beam
+  if (intensity > 0.3) {
+    stroke(hue + 30, 100, 90, intensity * 120);
+    strokeWeight(0.8);
+    for (let i = 0; i < 3; i++) {
+      let t = random(1);
+      let sx = lerp(fromX, toX, t);
+      let sy = lerp(fromY, toY, t);
+      let off = random(-6, 6);
+      let d = createVector(toX - fromX, toY - fromY).normalize();
+      let perp = createVector(-d.y, d.x);
+      line(sx, sy, sx + perp.x * off, sy + perp.y * off);
+    }
+  }
+  pop();
+}
+
+// === Draw turret ===
+function drawTurret() {
+  push();
+  translate(turretPos.x, turretPos.y);
+
+  // Base platform
+  noStroke();
+  fill(PALETTE.turret.h, 60, 25, 255);
+  ellipse(0, 0, 42, 42);
+  fill(PALETTE.turret.h, 70, 40, 255);
+  ellipse(0, 0, 30, 30);
+
+  // Rotating head
+  rotate(turretAngle + HALF_PI);
+  fill(PALETTE.turret.h, 80, 60, 255);
+  ellipse(0, 0, 18, 26);
+  fill(PALETTE.turret.h, 90, 80, 255);
+  ellipse(0, -4, 10, 14);
+  // Barrel
+  fill(PALETTE.turret.h, 70, 50, 255);
+  rect(-3, -22, 6, 14);
+  // Muzzle glow
+  let glowPulse = 0.5 + sin(timeSec * 6) * 0.3;
+  fill(PALETTE.laser.h, 100, 90, glowPulse * 120);
+  ellipse(0, -24, 8, 8);
+  fill(PALETTE.laser.h, 100, 100, glowPulse * 200);
+  ellipse(0, -24, 3.5, 3.5);
+
+  pop();
+}
+
+// === Background grid ===
+function drawGrid() {
+  push();
+  let gs = 40;
+  gridOffset = (gridOffset + 0.15) % gs;
+  stroke(PALETTE.grid.h, PALETTE.grid.s, PALETTE.grid.b, 35);
+  strokeWeight(0.5);
+  for (let x = -gs; x < width + gs; x += gs) {
+    line(x + gridOffset * 0.3, 0, x + gridOffset * 0.3, height);
+  }
+  for (let y = -gs; y < height + gs; y += gs) {
+    line(0, y + gridOffset, width, y + gridOffset);
+  }
+  // Vignette corners
+  noStroke();
+  fill(PALETTE.bg.h, PALETTE.bg.s, PALETTE.bg.b, 80);
+  rect(0, 0, width, 60);
+  rect(0, height - 60, width, 60);
+  rect(0, 0, 60, height);
+  rect(width - 60, 0, 60, height);
+  pop();
+}
+
+// === HUD ===
+function drawHUD() {
+  let el = document.getElementById('hud');
+  let fps = round(fpsSmooth);
+  let fpsClass = fps >= 50 ? 'val' : fps >= 30 ? 'amber' : 'warn';
+  let detCount = mosquitoes.filter(m => m.detected).length;
+  el.innerHTML =
+    '<span class="lbl">MOSQUITO ZAPPER</span> <span class="lbl">// MK-III</span>\n' +
+    '<span class="lbl">───────────────</span>\n' +
+    '<span class="lbl">DETECTED:</span> <span class="val">' + detCount + ' / ' + mosquitoes.length + '</span>\n' +
+    '<span class="lbl">ZAPPED:</span>   <span class="val">' + stats.zapped + '</span>\n' +
+    '<span class="lbl">SHOTS:</span>    <span class="val">' + stats.shots + '</span>\n' +
+    '<span class="lbl">ACCURACY:</span> <span class="val">' + (stats.shots > 0 ? round(stats.zapped / stats.shots * 100) : 0) + '%</span>\n' +
+    '<span class="lbl">FPS:</span>      <span class="' + fpsClass + '">' + fps + '</span>\n' +
+    '<span class="lbl">MODE:</span>     <span class="' + (autoTarget ? 'val' : 'warn') + '">' + (autoTarget ? 'AUTO' : 'MANUAL') + '</span>';
+}
+
+// === Find best target within detection radius ===
+function findBestTarget() {
+  let best = null;
+  let bestDist = Infinity;
+  for (let m of mosquitoes) {
+    let d = dist(turretPos.x, turretPos.y, m.pos.x, m.pos.y);
+    if (d < CONFIG.effectiveDetectRadius && d < bestDist) {
+      bestDist = d;
+      best = m;
+    }
+  }
+  return best;
+}
+
+// === Fire laser at target ===
+function fireLaser(target) {
+  let d = dist(turretPos.x, turretPos.y, target.pos.x, target.pos.y);
+  if (d > CONFIG.laserRange) return;
+
+  stats.shots++;
+  zapCooldown = CONFIG.zapCooldown;
+
+  // Visual beam
+  drawLaser(turretPos.x, turretPos.y, target.pos.x, target.pos.y, 1.0);
+
+  // Hit!
+  spawnZapExplosion(target.pos.x, target.pos.y, PALETTE.zap.h);
+  target.flashTimer = 0.5;
+  target.detectPulse = 1;
+  stats.zapped++;
+
+  // Remove mosquito, respawn new one
+  let idx = mosquitoes.indexOf(target);
+  if (idx !== -1) mosquitoes.splice(idx, 1);
+  if (lockedTarget === target) lockedTarget = null;   // force re-acquire
+  mosquitoes.push(spawnMosquito());
+}
+
+// === setup ===
+function setup() {
+  pixelDensity(1);
+  createCanvas(windowWidth, windowHeight);
+  colorMode(HSB, 360, 100, 100, 100);
+  textAlign(LEFT, TOP);
+  textFont('Courier New');
+
+  turretPos = createVector(width / 2, height * CONFIG.turretYFraction);
+
+  bgBuffer = createGraphics(width, height);
+  trailBuffer = createGraphics(width, height);
+
+  for (let i = 0; i < CONFIG.mosquitoCount; i++) {
+    let m = new Mosquito();
+    m.pos.set(random(width * 0.1, width * 0.9), random(height * 0.1, height * 0.7));
+    mosquitoes.push(m);
+  }
+}
+
+// === draw ===
+function draw() {
+  let dt = min(deltaTime / 1000, 0.05);
+  timeSec += dt;
+  fpsSmooth = lerp(fpsSmooth, 1 / max(dt, 0.001), 0.05);
+  zapCooldown = max(0, zapCooldown - dt);
+  scanTimer = max(0, scanTimer - dt);
+
+  // --- Background ---
+  background(PALETTE.bg.h, PALETTE.bg.s, PALETTE.bg.b);
+  drawGrid();
+
+  // --- Trail buffer (fade + draw mosquito trails) ---
+  trailBuffer.push();
+  trailBuffer.colorMode(HSB, 360, 100, 100, 100);
+  trailBuffer.noStroke();
+  trailBuffer.fill(PALETTE.bg.h, PALETTE.bg.s, PALETTE.bg.b, CONFIG.trailFade * 100);
+  trailBuffer.rect(0, 0, width, height);
+
+  for (let m of mosquitoes) {
+    trailBuffer.noStroke();
+    trailBuffer.fill(m.bodyHue, PALETTE.trail.s, PALETTE.trail.b, 45);
+    trailBuffer.ellipse(m.pos.x, m.pos.y, m.size * 1.5, m.size * 1.5);
+    // Wing trail
+    let wingOff = sin(m.wingPhase) * m.size * 1.5;
+    trailBuffer.fill(m.bodyHue, 60, 50, 25);
+    trailBuffer.ellipse(m.pos.x - m.size * 2, m.pos.y - wingOff, m.size * 0.8, m.size * 0.8);
+    trailBuffer.ellipse(m.pos.x - m.size * 2, m.pos.y + wingOff, m.size * 0.8, m.size * 0.8);
+  }
+  trailBuffer.pop();
+
+  image(bgBuffer, 0, 0);
+  image(trailBuffer, 0, 0);
+
+  // --- Detection system ---
+  let anyDetected = false;
+  let detCount = 0;
+  for (let m of mosquitoes) {
+    let d = dist(turretPos.x, turretPos.y, m.pos.x, m.pos.y);
+    m.detected = d < CONFIG.effectiveDetectRadius;
+    if (m.detected) {
+      anyDetected = true;
+      detCount++;
+      m.detectPulse = max(m.detectPulse, 0.5 + sin(timeSec * 5 + m.id) * 0.3);
+      drawDetectBox(m, m.detectPulse);
+    }
+  }
+  // stats.detected was declared but never assigned; the HUD recomputed the
+  // count inline. Keep both in sync so telemetry is meaningful.
+  stats.detected = detCount;
+
+  // --- Turret & laser ---
+  // Target persistence: without this the turret re-picks the nearest mosquito
+  // every frame, oscillates between two candidates, and almost never converges
+  // enough to fire (measured: 1 shot in 25 s despite a 0.35 s cooldown).
+  // A real tracker locks a target and holds it until it is killed or lost.
+  let target = null;
+  if (autoTarget) {
+    if (lockedTarget && mosquitoes.includes(lockedTarget) &&
+        dist(turretPos.x, turretPos.y, lockedTarget.pos.x, lockedTarget.pos.y)
+          < CONFIG.effectiveDetectRadius) {
+      target = lockedTarget;          // keep the lock
+    } else {
+      target = findBestTarget();
+      lockedTarget = target;
+      lockTimer = 0;
+    }
+  } else if (mouseHeld && mouseMode === 'attract') {
+    // Manual mode: target nearest to mouse
+    let bestD = Infinity;
+    for (let m of mosquitoes) {
+      let d = dist(mouseX, mouseY, m.pos.x, m.pos.y);
+      if (d < bestD) { bestD = d; target = m; }
+    }
+  }
+
+  // Rotate turret toward target
+  if (target) {
+    // Angle to the ACTUAL target - this is what determines whether a shot
+    // would hit, so it is what the fire gate must use.
+    let actualAngle = atan2(target.pos.y - turretPos.y,
+                            target.pos.x - turretPos.x);
+    let actualDiff = actualAngle - turretAngle;
+    while (actualDiff > PI) actualDiff -= TWO_PI;
+    while (actualDiff < -PI) actualDiff += TWO_PI;
+
+    // Aim with lead prediction. A mosquito darts at up to ~2 px/frame; aiming
+    // at its current position means the turret is always chasing where it was.
+    // Fade the lead out as we converge so the aim settles exactly on target.
+    const LEAD_TIME = 0.05;   // seconds of predicted travel
+    let offAxis = constrain(abs(actualDiff) / 0.5, 0, 1);  // 0 when aligned
+    let aimX = target.pos.x + target.vel.x * LEAD_TIME * 60 * offAxis;
+    let aimY = target.pos.y + target.vel.y * LEAD_TIME * 60 * offAxis;
+
+    let desired = atan2(aimY - turretPos.y, aimX - turretPos.x);
+    let diff = desired - turretAngle;
+    while (diff > PI) diff -= TWO_PI;
+    while (diff < -PI) diff += TWO_PI;
+    let maxTurn = CONFIG.laserTurnSpeed * dt;
+    turretAngle += constrain(diff, -maxTurn, maxTurn);
+
+    // Fire when the beam is actually pointing at the target. Gate on
+    // actualDiff, not the lead-point diff: the lead point swings around and
+    // made the old gate open at essentially random moments.
+    if (abs(actualDiff) < CONFIG.fireTolerance && zapCooldown <= 0) {
+      fireLaser(target);
+    }
+
+    // Lock timeout: if we have held this target too long without a kill,
+    // drop it and pick another. Prevents fixating on one evasive mosquito.
+    lockTimer += dt;
+    if (lockTimer > CONFIG.lockTimeout) {
+      lockedTarget = null;
+      lockTimer = 0;
+    }
+  } else {
+    // Idle sweep
+    turretAngle += sin(timeSec * 0.6) * 0.4 * dt;
+  }
+
+  // Draw laser beam (visual, during zap cooldown flash)
+  // Window widened from 0.08s to 0.22s - at 0.08s the beam was on screen for
+  // only ~4-5 frames and was easy to miss entirely.
+  if (zapCooldown > CONFIG.zapCooldown - 0.22 && target) {
+    let d = dist(turretPos.x, turretPos.y, target.pos.x, target.pos.y);
+    if (d < CONFIG.laserRange) {
+      drawLaser(turretPos.x, turretPos.y, target.pos.x, target.pos.y, zapCooldown / CONFIG.zapCooldown);
+    }
+  }
+
+  drawTurret();
+
+  // --- Detection radius ring ---
+  noFill();
+  let ringAlpha = anyDetected ? 35 + sin(timeSec * 3) * 15 : 20;
+  stroke(PALETTE.scan.h, PALETTE.scan.s, PALETTE.scan.b, ringAlpha);
+  strokeWeight(1);
+  ellipse(turretPos.x, turretPos.y, CONFIG.effectiveDetectRadius * 2, CONFIG.effectiveDetectRadius * 2);
+  // Rotating scan arc
+  stroke(PALETTE.scan.h, PALETTE.scan.s, PALETTE.scan.b, 60);
+  strokeWeight(1.5);
+  let scanA = timeSec * 1.2;
+  arc(turretPos.x, turretPos.y, CONFIG.effectiveDetectRadius * 2, CONFIG.effectiveDetectRadius * 2, scanA, scanA + 0.8);
+
+  // --- Update & draw mosquitoes ---
+  for (let m of mosquitoes) {
+    m.update(dt);
+    m.display();
+  }
+
+  // --- Particles & ripples ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update(dt);
+    particles[i].display();
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    ripples[i].update(dt);
+    ripples[i].display();
+    if (ripples[i].life <= 0) ripples.splice(i, 1);
+  }
+
+  // --- Mouse interaction visual ---
+  if (mouseHeld) {
+    let col = mouseMode === 'attract' ? PALETTE.detect.h : PALETTE.laser.h;
+    noFill();
+    stroke(col, 80, 80, 60 + sin(timeSec * 8) * 30);
+    strokeWeight(1.5);
+    let r = mouseMode === 'attract' ? CONFIG.mouseAttractRadius : CONFIG.mouseRepelRadius;
+    ellipse(mouseX, mouseY, r * 2, r * 2);
+    // Inner crosshair
+    stroke(col, 90, 90, 100);
+    strokeWeight(1);
+    line(mouseX - 8, mouseY, mouseX + 8, mouseY);
+    line(mouseX, mouseY - 8, mouseX, mouseY + 8);
+  }
+
+  // --- Scan pulse wave ---
+  if (scanTimer <= 0) {
+    scanTimer = 2.5;
+    scanPulse = 1;
+  }
+  if (scanPulse > 0) {
+    scanPulse -= dt * 0.8;
+    noFill();
+    stroke(PALETTE.scan.h, PALETTE.scan.s, PALETTE.scan.b, scanPulse * 40);
+    strokeWeight(2);
+    let sr = (1 - scanPulse) * max(width, height);
+    ellipse(turretPos.x, turretPos.y, sr * 2, sr * 2);
+  }
+
+  // --- HUD ---
+  drawHUD();
+}
+
+// === Event handlers ===
+function mousePressed() {
+  mouseHeld = true;
+  if (mouseButton === LEFT) mouseMode = 'attract';
+  else if (mouseButton === RIGHT) mouseMode = 'repel';
+}
+
+function mouseReleased() {
+  mouseHeld = false;
+  mouseMode = 'none';
+}
+
+function keyPressed() {
+  if (key === ' ') {
+    autoTarget = !autoTarget;
+  } else if (key === '+' || key === '=') {
+    mosquitoes.push(spawnMosquito());
+  } else if (key === '-' || key === '_') {
+    if (mosquitoes.length > 3) mosquitoes.splice(floor(random(mosquitoes.length)), 1);
+  } else if (key === 'r' || key === 'R') {
+    stats.zapped = 0;
+    stats.shots = 0;
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  turretPos.set(width / 2, height * CONFIG.turretYFraction);
+  bgBuffer = createGraphics(width, height);
+  trailBuffer = createGraphics(width, height);
+}
+
+// Prevent context menu on right click
+document.addEventListener('contextmenu', e => e.preventDefault());
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Core dependencies
+opencv-python>=4.5.0
+numpy>=1.21.0
+pyyaml>=5.4.0
+
+# Web dashboard
+flask>=2.0.0
+Pillow>=9.0.0
+
+# Raspberry Pi hardware control (optional)
+# RPi.GPIO>=0.7.0
+# pigpio>=1.78
+
+# Development / testing
+pytest>=7.0.0

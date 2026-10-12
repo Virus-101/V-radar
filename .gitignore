@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
+
+# Logs and local state
+*.log
+mosquito_zapper.log
+
+# Captures (large, and may contain your receiver position)
+*.txt
+!requirements.txt
+capture*.txt
+adsb_*.txt
+
+# Generated media
+preview/*.mp4
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interlock Gate Explorer</title>
+<style>
+  * { box-sizing: border-box; }
+  .wrap { font-size: 13px; line-height: 1.5; color: var(--foreground); }
+  h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .sub { color: var(--muted-foreground); font-size: 12px; margin-bottom: 12px; }
+  .grid { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .controls { min-width: 250px; }
+  .gate { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .gate label { flex: 1; cursor: pointer; }
+  .gate input { cursor: pointer; }
+  .chain { min-width: 400px; flex: 1; }
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px; border-radius: 4px; margin-bottom: 2px;
+    border: 1px solid transparent; font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+  .row.pass { color: var(--foreground); }
+  .row.block { background: color-mix(in srgb, #ff3366 14%, transparent);
+               border-color: color-mix(in srgb, #ff3366 40%, transparent); }
+  .row.skip { color: var(--muted-foreground); opacity: .55; }
+  .row.pending { color: var(--muted-foreground); opacity: .4; }
+  .n { width: 16px; text-align: right; color: var(--muted-foreground); }
+  .mark { width: 14px; text-align: center; font-weight: 700; }
+  .mark.ok { color: #22c55e; } .mark.no { color: #ff3366; }
+  .name { flex: 1; }
+  .val { color: var(--muted-foreground); font-size: 11px; }
+  .verdict {
+    margin-top: 10px; padding: 8px 10px; border-radius: 5px;
+    font-family: ui-monospace, monospace; font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .verdict.fire { background: color-mix(in srgb, #ff3366 16%, transparent);
+                  border-color: color-mix(in srgb, #ff3366 45%, transparent); }
+  .verdict.safe { background: color-mix(in srgb, #22c55e 12%, transparent);
+                  border-color: color-mix(in srgb, #22c55e 40%, transparent); }
+  .note { margin-top: 10px; color: var(--muted-foreground); font-size: 11px;
+          border-left: 2px solid var(--border); padding-left: 8px; }
+  .pin { font-family: ui-monospace, monospace; }
+  .pin.on { color: #ff3366; font-weight: 700; }
+  .pin.off { color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h3>SafetyInterlocks.check_all() — live gate order</h3>
+  <div class="sub">
+    Toggle conditions to watch the chain short-circuit. Logic is a direct port of
+    <span class="pin">laser_controller.py</span>, including the L3 species gate.
+  </div>
+
+  <div class="grid">
+    <div class="controls">
+      <div class="gate"><input type="checkbox" id="estop"><label for="estop">1 · Emergency stop active</label></div>
+      <div class="gate"><input type="checkbox" id="armed" checked><label for="armed">2 · Manually armed</label></div>
+      <div class="gate"><input type="checkbox" id="active" checked><label for="active">3 · Active mode</label></div>
+      <div class="gate"><input type="checkbox" id="confirmed" checked><label for="confirmed">4 · Track confirmed</label></div>
+      <div class="gate"><input type="checkbox" id="wingbeat" checked><label for="wingbeat">5 · Wingbeat confirms biting female</label></div>
+      <div class="gate"><input type="checkbox" id="inzone" checked><label for="inzone">6 · Inside firing zone (80 px)</label></div>
+      <div class="gate"><input type="checkbox" id="cooldown"><label for="cooldown">7 · In per-target cooldown</label></div>
+      <div class="gate"><input type="checkbox" id="session"><label for="session">8 · Session limit reached</label></div>
+      <div class="gate"><input type="checkbox" id="window"><label for="window">9 · Outside time window</label></div>
+      <div class="gate"><input type="checkbox" id="shotcd"><label for="shotcd">10 · In shot cooldown</label></div>
+      <div class="note">
+        <b>Try this:</b> uncheck <i>Wingbeat confirms biting female</i> — the chain
+        stops at gate 5 with <span class="pin">NO_WINGBEAT_CONFIRM</span>. That is the
+        gate that stops the system firing at a male or a housefly. Everything below is
+        never evaluated — the point of short-circuiting.
+      </div>
+    </div>
+
+    <div class="chain">
+      <div id="rows"></div>
+      <div class="verdict" id="verdict"></div>
+      <div style="margin-top:10px">
+        <span class="pin" id="pinout">GPIO 26 → MOSFET gate: —</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GATES = [
+  { id:'estop',     n:1, name:'Emergency stop',        key:'emergency_stop',            reason:'EMERGENCY_STOP',        val:'' },
+  { id:'armed',     n:2, name:'Manual arming',         key:'manual_arm',                reason:'NOT_ARMED',             val:'manual_arm = true' },
+  { id:'active',    n:3, name:'Active mode',           key:'require_active_mode',       reason:'NOT_ACTIVE',            val:'require_active_mode = true' },
+  { id:'confirmed', n:4, name:'Confirmed track',       key:'require_confirmed_track',   reason:'NO_CONFIRMED_TRACK',    val:'require_confirmed_track = true' },
+  { id:'wingbeat',  n:5, name:'Species / wingbeat',    key:'require_wingbeat',          reason:'NO_WINGBEAT_CONFIRM (non-target band (180-260 Hz))', val:'require_wingbeat = true' },
+  { id:'inzone',    n:6, name:'Inside firing zone',    key:'firing_zone_radius',        reason:'OUTSIDE_FIRING_ZONE',   val:'firing_zone_radius = 80 px' },
+  { id:'cooldown',  n:7, name:'Per-target cooldown',   key:'cooldown_per_target_ms',    reason:'TARGET_COOLDOWN (231ms)', val:'cooldown_per_target_ms = 500' },
+  { id:'session',   n:8, name:'Session limit',         key:'max_fires_per_session',     reason:'SESSION_LIMIT_REACHED', val:'max_fires_per_session = 100' },
+  { id:'window',    n:9, name:'Time window',           key:'firing_time_window',        reason:'OUTSIDE_TIME_WINDOW',   val:'firing_time_window = None' },
+  { id:'shotcd',    n:10, name:'Min between shots',     key:'min_between_shots_ms',      reason:'SHOT_COOLDOWN (88ms)',  val:'min_between_shots_ms = 250' },
+];
+
+// Invert where a checked box means the gate FAILS (estop, cooldown, session...)
+const FAILS_WHEN_CHECKED = new Set(['estop','cooldown','session','window','shotcd']);
+
+function evaluate() {
+  const rows = [];
+  let blockedAt = null;
+  for (const g of GATES) {
+    const checked = document.getElementById(g.id).checked;
+    const fails = FAILS_WHEN_CHECKED.has(g.id) ? checked : !checked;
+    if (blockedAt !== null) {
+      rows.push({ ...g, state:'skip', reason: g.reason });
+      continue;
+    }
+    if (fails) {
+      rows.push({ ...g, state:'block', reason: g.reason });
+      blockedAt = g.n;
+    } else {
+      rows.push({ ...g, state:'pass', reason: 'OK' });
+    }
+  }
+  return { rows, blockedAt };
+}
+
+function render() {
+  const { rows, blockedAt } = evaluate();
+  document.getElementById('rows').innerHTML = rows.map(r => {
+    const mark = r.state === 'pass' ? '<span class="mark ok">✓</span>'
+               : r.state === 'block' ? '<span class="mark no">✗</span>'
+               : '<span class="mark">·</span>';
+    const detail = r.state === 'block' ? ` → ${r.reason}`
+                 : r.state === 'pass' ? ' → OK' : ' (not evaluated)';
+    return `<div class="row ${r.state}">`
+         + `<span class="n">${r.n}</span>${mark}`
+         + `<span class="name">${r.name}</span>`
+         + `<span class="val">${r.key}${detail}</span></div>`;
+  }).join('');
+
+  const v = document.getElementById('verdict');
+  const pin = document.getElementById('pinout');
+  if (blockedAt === null) {
+    v.className = 'verdict fire';
+    v.innerHTML = '<b>check_all() → (True, "OK")</b> — laser enabled for one pulse'
+                + '<br><span class="val">LaserController.try_fire() → set_laser(True), '
+                + 'record_fire(track_id)</span>';
+    pin.className = 'pin on';
+    pin.textContent = 'GPIO 26 → MOSFET gate: HIGH (beam ON)';
+  } else {
+    v.className = 'verdict safe';
+    v.innerHTML = `<b>check_all() → (False, "${rows[blockedAt-1].reason.split(' ')[0]}")</b>`
+                + ` — blocked at gate ${blockedAt}, laser stays off`;
+    pin.className = 'pin off';
+    pin.textContent = 'GPIO 26 → MOSFET gate: LOW (beam OFF)';
+  }
+}
+
+document.querySelectorAll('input[type=checkbox]').forEach(cb =>
+  cb.addEventListener('change', render));
+render();
+</script>
+</body>
+</html>

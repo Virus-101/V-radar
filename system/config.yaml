@@ -1,0 +1,232 @@
+# ============================================================
+#  Mosquito Laser Zapper — System Configuration
+# ============================================================
+#  Tune these values to match your hardware setup.
+#  All distances in pixels, angles in degrees, time in ms.
+# ============================================================
+
+system:
+  # Enable/Disable subsystems
+  detection_enabled: true
+  tracking_enabled: true
+  servo_enabled: true
+  laser_enabled: true
+  web_dashboard_enabled: true
+
+  # Frame processing
+  camera_index: 0              # /dev/video0
+  frame_width: 640
+  frame_height: 480
+  fps: 30
+
+  # Region of interest (crop frame to this area)
+  # Set to [0, 0, width, height] for full frame
+  roi: [0, 0, 640, 480]
+
+# ============================================================
+#  Detection Settings (Background Subtraction)
+# ============================================================
+detection:
+  # Background subtractor type: "mog2" or "knn"
+  subtractor: "mog2"
+
+  # MOG2 parameters
+  mog2_history: 500          # Frames for background model
+  mog2_var_threshold: 16     # Variance threshold for foreground
+  mog2_detect_shadows: true
+
+  # KNN parameters
+  knn_history: 500
+  knn_dist_threshold: 400.0
+  knn_detect_shadows: true
+
+  # Morphological operations
+  open_kernel: 3             # Noise removal
+  close_kernel: 5            # Fill holes
+  dilate_kernel: 3           # Connect nearby blobs
+  dilate_iterations: 2
+
+  # Filter detected contours
+  min_area: 5                # Minimum blob area (px²)
+  max_area: 200              # Maximum blob area (px²)
+  min_aspect_ratio: 0.3      # width/height
+  max_aspect_ratio: 3.0
+  min_solidity: 0.5          # contour_area / convex_hull_area
+
+  # Frame differencing (alternative to bg subtractor)
+  use_frame_diff: false      # Set true to use differencing instead
+  diff_threshold: 25         # Pixel intensity difference threshold
+  diff_blur_kernel: 5        # Gaussian blur before differencing
+
+# ============================================================
+#  Tracking Settings (Kalman Filter)
+# ============================================================
+tracking:
+  # State: [x, y, vx, vy]  — position + velocity
+  # Measurement: [x, y]    — observed centroid
+  process_noise: 0.01      # Q matrix diagonal
+  measurement_noise: 1.0   # R matrix diagonal
+
+  # Track management
+  max_missing_frames: 10    # Frames before dropping a track
+  min_hits_to_confirm: 3    # Detections before track is confirmed
+  iou_threshold: 0.3        # For association (if using IoU)
+  distance_threshold: 50    # Max pixel distance for association
+
+  # Predictive tracking
+  use_prediction: true      # Predict during missing frames
+  prediction_frames: 5      # Frames to predict ahead for aiming
+
+# ============================================================
+#  Pan-Tilt Servo Settings
+# ============================================================
+pan_tilt:
+  # Servo GPIO pins (BCM numbering)
+  pan_pin: 18                # Hardware PWM capable
+  tilt_pin: 19
+
+  # Pulse width range (microseconds)
+  pan_min_us: 500
+  pan_max_us: 2500
+  tilt_min_us: 500
+  tilt_max_us: 2500
+
+  # Angle limits (degrees)
+  pan_min_angle: -90
+  pan_max_angle: 90
+  tilt_min_angle: -45
+  tilt_max_angle: 45
+
+  # Initial position
+  pan_home: 0
+  tilt_home: 0
+
+  # Movement smoothing
+  max_step_per_frame: 5      # Max degrees per frame update
+  smoothing_alpha: 0.3       # EMA smoothing factor (0-1, higher = more responsive)
+
+  # Camera-to-servo offset calibration
+  # Maps pixel offset to angle offset
+  pixels_per_degree_x: 10.0
+  pixels_per_degree_y: 10.0
+  x_center: 320              # Frame center X
+  y_center: 240              # Frame center Y
+
+  # Dead zone (don't move if within this many pixels of center)
+  dead_zone_x: 15
+  dead_zone_y: 15
+
+  # Use hardware PWM via pigpio, or software PWM via RPi.GPIO
+  pwm_backend: "pigpio"      # "pigpio" or "rpi.gpio" or "mock"
+
+  # Mock mode for development (no hardware)
+  mock_servos: false
+
+# ============================================================
+#  Laser Settings
+# ============================================================
+laser:
+  # GPIO pin for laser control (BCM)
+  laser_pin: 26
+
+  # PWM settings for laser power (if supported)
+  use_pwm: true
+  pwm_frequency: 1000         # Hz
+
+  # Safety interlocks — ALL must be true to fire
+  safety_interlocks:
+    # 1. Manual arming switch (physical or software)
+    manual_arm: true
+
+    # 2. System must be in "active" mode (not standby)
+    require_active_mode: true
+
+    # 3. Target must be confirmed (min_hits met)
+    require_confirmed_track: true
+    # --- L3 species gate: photodiode wingbeat confirmation ---
+    # Default true. A gate that defaults to off is not a safety gate.
+    # Set false ONLY for bench testing with no photodiode channel fitted.
+    require_wingbeat: true
+    min_wingbeat_confidence: 0.35
+    # Wingbeat evidence expires after this long, so a stale reading from an
+    # insect that has already left the curtain cannot authorise a shot.
+    wingbeat_evidence_max_age_s: 0.5
+
+    # 4. Target must be within firing zone (center of frame)
+    firing_zone_radius: 80     # pixels from center
+
+    # 5. Laser can only fire once per X seconds per target
+    cooldown_per_target_ms: 500
+
+    # 6. Maximum continuous fire time
+    max_continuous_fire_ms: 200
+
+    # 7. Daily firing time window (24h format, null = always)
+    #    e.g. "18:00-23:00" for evening only
+    firing_time_window: null
+
+    # 8. Max fires per session
+    max_fires_per_session: 100
+
+    # 9. Emergency stop (sets immediately kill laser)
+    emergency_stop: false
+
+    # 10. Minimum time between any two shots
+    min_time_between_shots_ms: 100
+
+  # Laser power levels (0-100%)
+  power_levels:
+    low: 30
+    medium: 60
+    high: 100
+
+  # Default power level
+  default_power: "medium"
+
+  # Use mock laser (no hardware)
+  mock_laser: false
+
+# ============================================================
+#  Web Dashboard
+# ============================================================
+web_dashboard:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+  # Stream settings
+  stream_quality: 80         # JPEG quality (0-100)
+  stream_max_fps: 15         # Max frames per second for stream
+  overlay_enabled: true      # Draw detection/tracking overlays
+
+  # Authentication (optional)
+  use_auth: false
+  username: "admin"
+  password: "zapper"
+
+  # Enable remote arming/disarming
+  allow_remote_arm: true
+
+# ============================================================
+#  Logging
+# ============================================================
+logging:
+  level: "INFO"              # DEBUG, INFO, WARNING, ERROR
+  file: "mosquito_zapper.log"
+  max_bytes: 5242880         # 5 MB
+  backup_count: 3
+  console_output: true
+
+# ============================================================
+#  Performance
+# ============================================================
+performance:
+  # Process every Nth frame (1 = every frame)
+  process_every_n_frames: 1
+
+  # Detection runs at this resolution (smaller = faster)
+  detection_width: 320
+  detection_height: 240
+
+  # Use threading for web server
+  threaded_web_server: true
