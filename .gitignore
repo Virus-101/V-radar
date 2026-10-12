@@ -11,10 +11,9 @@ venv/
 mosquito_zapper.log
 
 # Captures (large, and may contain your receiver position)
-*.txt
-!requirements.txt
 capture*.txt
 adsb_*.txt
+!requirements*.txt
 
 # Generated media
 preview/*.mp4

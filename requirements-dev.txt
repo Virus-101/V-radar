@@ -1,0 +1,20 @@
+# V-Radar — everything needed to run the full verification suite.
+#
+# Verified against a clean venv: these are exactly what `run_all_tests.sh`
+# needs, no more. CI installs this same set (.github/workflows/verify.yml).
+#
+#   python -m venv .venv
+#   .venv/bin/pip install -r requirements-dev.txt     # or .venv\Scripts\pip
+#   bash run_all_tests.sh
+
+numpy                       # every numerical test
+pytest                      # the integrated system suite (42 tests)
+pyyaml                      # system/config.py reads config.yaml
+opencv-python-headless      # system/detector.py imports cv2; headless = no GUI libs
+Pillow                      # full_system.py overlay rendering imports PIL
+
+# Optional — only for live hardware, not needed by any test:
+#   pyserial                  # adsb/pps_monitor.py --serial, radar_trigger SerialRadarBackend
+#   RPi.GPIO                  # Raspberry Pi servo/laser backends
+#   pigpio                    # better PWM backend on a Pi
+#   flask                     # system/web_dashboard.py
