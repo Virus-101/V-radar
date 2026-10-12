@@ -32,9 +32,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy
-          # pytest is needed for the integrated system tests
-          python -m pip install pytest
+          # Verified against a clean venv - these are exactly what the suite
+          # needs, no more:
+          #   numpy              every numerical test
+          #   pytest             the integrated system suite
+          #   pyyaml             system/config.py reads config.yaml
+          #   opencv headless    system/detector.py imports cv2 (no GUI libs)
+          #   Pillow             full_system.py overlay rendering imports PIL
+          python -m pip install -r requirements-dev.txt
 
       - name: ADS-B decoder
         working-directory: adsb
