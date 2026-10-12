@@ -1,0 +1,51 @@
+MIT License
+
+Copyright (c) 2026 Virus-101
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+===============================================================================
+
+SAFETY AND LEGAL NOTICE - READ BEFORE BUILDING ANY HARDWARE
+
+This repository describes, among other things, a system that can emit laser
+radiation at a power sufficient to cause permanent blindness.
+
+  1. The laser analysis in hardware/laser_power_and_safety.md is provided for
+     information. It is not a substitute for a formal laser safety assessment
+     under ANSI Z136.1, IEC 60825-1, or your local equivalent.
+
+  2. Building or operating a Class 3B or Class 4 laser system may require
+     licensing, a designated Laser Safety Officer, and controlled access
+     areas, depending on your jurisdiction. You are responsible for
+     compliance.
+
+  3. The authors accept no liability for injury, damage, or legal consequence
+     arising from the use of this material. Building any laser system is done
+     entirely at your own risk.
+
+  4. RECEIVING radio signals (the ADS-B and MLAT systems) is unlicensed in
+     most jurisdictions. TRANSMITTING on a licensed band is not, and jamming
+     is a criminal offence in most countries. Nothing in this repository
+     transmits, and nothing in it should be modified to.
+
+  5. This project is a detection, tracking and display platform. It contains
+     no autonomous engagement capability and is not intended to acquire one.
+     Autonomous lethal targeting systems are prohibited under emerging
+     international law.

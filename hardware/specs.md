@@ -105,12 +105,40 @@ The Mosquito Laser Zapper is an autonomous mosquito detection and elimination sy
 
 ### 2.3 Laser System
 
-| # | Component | Part Number / SKU | Supplier | Qty | Unit Price (USD) | Total |
-|---|-----------|-------------------|----------|-----|-------------------|-------|
-| 9 | **650nm 5mW Laser Diode Module** (focusable, 3-5V) | — | Accio / AliExpress | 1 | $2.80 | $2.80 |
-| 10 | **650nm 100mW Laser Diode Module** (upgraded kill) | — | Accio / AliExpress | 1 | $8.50 | $8.50 |
-| 11 | **LPC836 650nm 100mW LD** (bare diode, OEM) | LPC836 | LaserLand | 1 | $8.00 | $8.00 |
-| 12 | **Brass Laser Housing (12mm)** | — | eBay / AliExpress | 1 | $1.50 | $1.50 |
+> ### ⛔ THIS TABLE IS WRONG — DO NOT BUY FROM IT
+>
+> The lethal dose for *Anopheles stephensi* is **3 W at 25 ms** (532 nm) —
+> Keller et al., *Sci. Rep.* 6, 20936. The parts below are **~30× too weak** to kill
+> anything, and **650 nm red is the least efficient wavelength available** (melanin
+> absorbs red weakly, so required power goes *up*, not down).
+>
+> | | Power | Lethal? |
+> |---|---|---|
+> | 650 nm 5 mW (row 9) | 5 mW | **no** — this is a cat toy |
+> | 650 nm 100 mW (rows 10–11) | 100 mW | **no** — ~1/30th of the required dose |
+> | **what is actually needed** | **3 W @ 532 nm** | yes, at 25 ms |
+> | **better still** | **2.1 W @ 10.6 µm CO₂** | yes, and absorbed before the retina |
+>
+> Use these rows only as a **Class 1/3R aiming pointer** to validate the tracking
+> pipeline. Do not label any of them a "kill" component.
+>
+> Full analysis: **`laser_power_and_safety.md`**.
+
+| # | Component | Part Number / SKU | Supplier | Qty | Unit Price (USD) | Total | Notes |
+|---|-----------|-------------------|----------|-----|-------------------|-------|-------|
+| 9 | 650nm 5mW Laser Diode Module (focusable, 3-5V) | — | Accio / AliExpress | 1 | $2.80 | $2.80 | ⛔ **aiming pointer only — not lethal** |
+| 10 | 650nm 100mW Laser Diode Module | — | Accio / AliExpress | 1 | $8.50 | $8.50 | ⛔ **NOT a kill component — 30× too weak** |
+| 11 | LPC836 650nm 100mW LD (bare diode, OEM) | LPC836 | LaserLand | 1 | $8.00 | $8.00 | ⛔ **NOT a kill component — wrong wavelength** |
+| 12 | Brass Laser Housing (12mm) | — | eBay / AliExpress | 1 | $1.50 | $1.50 | |
+
+**If you build a kill stage, the correct parts are:**
+
+| Part | ~USD | Why |
+|---|---|---|
+| **10.6 µm CO₂ laser, 2.1 W** | 400+ | Comparable power to green, **absorbed before the retina** — exclusion zone collapses to <1 m |
+| *or* 532 nm green, 3.0 W | 250+ | Most power-efficient, but needs a large exclusion zone |
+| Heatsink + TEC | 60 | A 3 W source needs real thermal management a 100 mW diode does not |
+| Driver rated for several amps | 40 | The MOSFET in §assembly is fine; the *ratings* are not |
 
 ### 2.4 Gimbal / Servo System
 

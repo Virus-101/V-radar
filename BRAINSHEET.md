@@ -465,8 +465,11 @@ to build long-range sensing without a spectrum allocation.
 
 ```
 V-radar/
-├── README.md                     entry point, three-system summary
+├── README.md                     entry point, four-system summary
 ├── BRAINSHEET.md                 ← this document
+├── run_all_tests.sh              full verification suite (10 checks)
+├── LICENSE                       MIT + safety/legal notice
+├── .github/workflows/verify.yml  CI: runs the suite on every push
 ├── SOFTWARE_AND_HARDWARE.md      interlock chain, GPIO map, module interfaces
 ├── interlock_explorer.html       interactive 10-gate interlock demo
 │

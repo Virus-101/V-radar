@@ -63,27 +63,41 @@ for the range.
 
 ## Quick start
 
+**Verify everything first** — one command, no hardware, no network:
+
 ```bash
-# Desktop app — the control GUI
-python system/desktop_app.py --mock        # synthesised swarm, no hardware
-python system/desktop_app.py               # live camera
-python system/desktop_app.py --video f.mp4 # replay footage
+bash run_all_tests.sh          # 10 checks; skip the sim with --quick
+```
+
+Expected: `10 passed, 0 failed`. If that is green, every "verified" claim in
+[`BRAINSHEET.md`](BRAINSHEET.md) §7 is true. CI runs the same suite on every push
+(`.github/workflows/verify.yml`).
+
+Then explore:
+
+```bash
+# ADS-B airspace monitor (system A) — works with no hardware
+python adsb/desktop.py --synthetic
+#   or on Windows:  adsb\launch.bat
+
+# Mosquito system control GUI (system C)
+python system/desktop_app.py --mock
 #   or on Windows:  system\launch_app.bat
 
 # Simulation — just open it
 start simulation/index.html          # Windows
 xdg-open simulation/index.html       # Linux
 
-# Simulation test matrix (deterministic, headless)
-bash simulation/run_tests.sh
+# Individual self-tests
+python adsb/decoder.py               # ADS-B decode, CPR test vector
+python adsb/mlat.py --demo           # TDOA solver vs ground truth
+python adsb/pps_monitor.py --demo    # clock discipline acceptance test
+python adsb/position_fusion.py       # ADS-B vs MLAT trust model
+python detection/wingbeat.py         # wingbeat -> species classifier
+python system/radar_trigger.py       # 24 GHz insect radar trigger
+cd system && python -m pytest test_system.py -q    # 42 tests
 
-# Wingbeat classifier self-test
-python detection/wingbeat.py
-
-# Integrated system tests
-cd system && python -m pytest test_system.py -q
-
-# Generate a video preview of the pipeline
+# Generate a video preview of the detection pipeline
 python system/preview.py --seconds 15
 ```
 
