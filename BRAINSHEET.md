@@ -237,8 +237,12 @@ PHASE 0 — SEE IT WORK (no hardware, today)
   GATE: all green. If not, fix the toolchain before buying anything.
 
 PHASE 1 — AIRSPACE (A)  ~$50, one afternoon
-  ├─ 1.1  rtl_test -s 2400000        → dongle seen?
-  ├─ 1.2  rtl_adsb | head            → hex frames = you are receiving
+  └─ python adsb/bringup.py --lat <your-lat> --lon <your-lon>
+       Checks each failure mode in turn: driver present, dongle enumerates,
+       tuner opens, frames arrive, CRC clean, positions resolve, and range vs
+       the radio horizon. Every failure prints the specific fix.
+  ├─ 1.1  (auto) dongle detected
+  ├─ 1.2  (auto) receiving frames     → the real test
   └─ 1.3  python adsb/desktop.py --rtl
   GATE: 100+ aircraft over an hour, CRC fail near zero, max range > 100 km.
         Cross-check one callsign against Flightradar24 — position must match.
@@ -467,7 +471,8 @@ to build long-range sensing without a spectrum allocation.
 V-radar/
 ├── README.md                     entry point, four-system summary
 ├── BRAINSHEET.md                 ← this document
-├── run_all_tests.sh              full verification suite (10 checks)
+├── run_all_tests.sh              full verification suite (11 checks)
+├── CONVENTIONS.md                11 rules learned by getting them wrong
 ├── LICENSE                       MIT + safety/legal notice
 ├── .github/workflows/verify.yml  CI: runs the suite on every push
 ├── SOFTWARE_AND_HARDWARE.md      interlock chain, GPIO map, module interfaces
@@ -484,6 +489,7 @@ V-radar/
 │   └── specs.md                  v1 spec, ⚠ partially superseded
 │
 ├── adsb/                         SYSTEM A + A+
+│   ├── bringup.py                Phase 1 hardware bring-up diagnostic
 │   ├── decoder.py                Mode-S/ADS-B from scratch (no deps)
 │   ├── receiver.py               sources + live tracker
 │   ├── desktop.py                full GUI: scope, filters, integrity, export

@@ -216,12 +216,7 @@ The solver is validated against **known ground truth** — positions are synthes
 TDOA computed forward, then recovered:
 
 ```
-case                                 true position                 solved      err
-overhead the network           33.5731,  -7.5898    33.5732,  -7.5902      41m
-~40 km NE, cruise              33.9000,  -7.5000    33.9013,  -7.5004     146m
-~90 km NE, cruise              34.2000,  -7.0000    34.2034,  -6.9978     432m
-~320 km NE, near horizon       35.5000,  -6.0000    35.5372,  -5.9723    4841m
-overhead, low altitude         33.5731,  -7.5898    33.5732,  -7.5903      45m
+
 ```
 
 Plus a 3-D solve (altitude unknown) that recovers altitude to ±354 m at 90 km, and a

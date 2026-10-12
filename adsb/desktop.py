@@ -7,7 +7,7 @@ transmitter anywhere: receiving ADS-B is unlicensed in every jurisdiction.
     python desktop.py                       # synthetic demo (no hardware)
     python desktop.py --rtl                 # live RTL-SDR
     python desktop.py --file capture.txt    # replay a recording
-    python desktop.py --lat 33.5731 --lon -7.5898
+    python desktop.py --lat 0.0 --lon 0.0
 
 Features
     * polar scope with range rings, trails, altitude colouring, heading vectors
@@ -799,8 +799,8 @@ class App(tk.Tk):
 
 def main():
     ap = argparse.ArgumentParser(description="ADS-B airspace monitor (desktop)")
-    ap.add_argument("--lat", type=float, default=33.5731)
-    ap.add_argument("--lon", type=float, default=-7.5898)
+    ap.add_argument("--lat", type=float, default=0.0)
+    ap.add_argument("--lon", type=float, default=0.0)
     ap.add_argument("--synthetic", action="store_true", default=False)
     ap.add_argument("--file")
     ap.add_argument("--rtl", action="store_true")

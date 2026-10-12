@@ -135,7 +135,7 @@ python desktop.py --rtl --lat <your-lat> --lon <your-lon>
 Or replay a recording:
 
 ```bash
-python desktop.py --file capture.txt --lat 33.5731 --lon -7.5898
+python desktop.py --file capture.txt --lat <your-lat> --lon <your-lon>
 ```
 
 ### Step 3 — tune

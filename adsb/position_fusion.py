@@ -220,7 +220,7 @@ def _self_test() -> int:
     fails = 0
     for label, s_a, s_m, gdop, offset_m, expect in cases:
         # place ADS-B at a reference point, MLAT offset due north
-        lat0, lon0 = 33.5731, -7.5898
+        lat0, lon0 = 0.0, 0.0
         dlat = offset_m / 111000.0
         adsb = PositionSource("adsb", lat0, lon0, 10000.0, s_a, timestamp=100.0)
         mlat = PositionSource("mlat", lat0 + dlat, lon0, 10000.0, s_m,
@@ -238,7 +238,7 @@ def _self_test() -> int:
 
     # --- single-source cases ---
     print("-" * 96)
-    adsb = PositionSource("adsb", 33.5731, -7.5898, 10000.0, 5.0)
+    adsb = PositionSource("adsb", 0.0, 0.0, 10000.0, 5.0)
     r = fuse("A", adsb, None)
     ok = r.status is Status.ADSB_ONLY
     fails += 0 if ok else 1
@@ -258,10 +258,10 @@ def _self_test() -> int:
 
     # --- time skew must suppress a false divergence ---
     print("-" * 96)
-    lat0 = 33.5731
-    adsb = PositionSource("adsb", lat0, -7.5898, 10000.0, 5.0, timestamp=100.0)
+    lat0 = 0.0
+    adsb = PositionSource("adsb", lat0, 0.0, 10000.0, 5.0, timestamp=100.0)
     # 5 km apart, but 20 seconds apart in time: an airliner covers 5 km in 20 s
-    mlat = PositionSource("mlat", lat0 + 5000 / 111000.0, -7.5898, 10000.0,
+    mlat = PositionSource("mlat", lat0 + 5000 / 111000.0, 0.0, 10000.0,
                           20.0, timestamp=120.0, gdop=2.0)
     r = fuse("D", adsb, mlat)
     ok = r.status is Status.AGREE
@@ -287,7 +287,7 @@ def _self_test() -> int:
 def _demo() -> int:
     print("Disagreement scenarios - what each one means in practice")
     print("=" * 96)
-    lat0, lon0 = 33.5731, -7.5898
+    lat0, lon0 = 0.0, 0.0
 
     scenarios = [
         ("healthy network, honest transponder",

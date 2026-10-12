@@ -69,9 +69,20 @@ for the range.
 bash run_all_tests.sh          # 10 checks; skip the sim with --quick
 ```
 
-Expected: `10 passed, 0 failed`. If that is green, every "verified" claim in
+Expected: `11 passed, 0 failed`. If that is green, every "verified" claim in
 [`BRAINSHEET.md`](BRAINSHEET.md) §7 is true. CI runs the same suite on every push
 (`.github/workflows/verify.yml`).
+
+**Then, when your dongle arrives**, run the hardware bring-up — it checks each
+failure mode specifically (driver, antenna, gain, RF overload) and tells you what
+to do about it:
+
+```bash
+python adsb/bringup.py --lat <your-lat> --lon <your-lon>
+```
+
+See also [`CONVENTIONS.md`](CONVENTIONS.md) — the rules this repo was built to,
+each learned by getting it wrong.
 
 Then explore:
 

@@ -388,13 +388,25 @@ def make_tdoa(network: ReceiverNetwork, true_lat: float, true_lon: float,
 # Demonstrations
 # ---------------------------------------------------------------------------
 
-def casablanca_network(clock_err_s: float = 10e-9) -> ReceiverNetwork:
-    """A plausible 4-station network around Casablanca. ~90 km baselines."""
+#: Neutral origin for the test network. Deliberately NOT a real location - the
+#: author's site should not be baked into a public test fixture.
+TEST_ORIGIN_LAT = 40.0
+TEST_ORIGIN_LON = 0.0
+
+
+def demo_network(clock_err_s: float = 10e-9) -> ReceiverNetwork:
+    """A plausible 4-station network on a neutral grid, ~80 km baselines.
+
+    The absolute position is arbitrary; what the solver cares about is the
+    GEOMETRY, so the stations are laid out around TEST_ORIGIN on a consistent
+    grid. Substitute your own site's coordinates to plan a real network.
+    """
+    lat0, lon0 = TEST_ORIGIN_LAT, TEST_ORIGIN_LON
     return ReceiverNetwork([
-        Receiver("CASA-C", 33.5731, -7.5898, 50.0, clock_err_s),
-        Receiver("CASA-N", 33.9000, -7.5000, 40.0, clock_err_s),
-        Receiver("CASA-E", 33.5000, -7.2000, 60.0, clock_err_s),
-        Receiver("CASA-S", 33.2000, -7.7000, 45.0, clock_err_s),
+        Receiver("RX-C", lat0,          lon0,          50.0, clock_err_s),
+        Receiver("RX-N", lat0 + 0.3300, lon0 + 0.0900, 40.0, clock_err_s),
+        Receiver("RX-E", lat0 - 0.0731, lon0 + 0.3900, 60.0, clock_err_s),
+        Receiver("RX-S", lat0 - 0.3731, lon0 - 0.1100, 45.0, clock_err_s),
     ])
 
 
@@ -403,7 +415,7 @@ def demo() -> int:
     print("MLAT SOLVER VALIDATION")
     print("=" * 78)
 
-    net = casablanca_network(clock_err_s=10e-9)
+    net = demo_network(clock_err_s=10e-9)
     print(net.describe())
     print()
 
@@ -415,11 +427,11 @@ def demo() -> int:
     #
     # (lat, lon, alt_m, label, max_acceptable_err_m)
     cases = [
-        (33.5731, -7.5898, 10000, "overhead the network",      150),
-        (33.9000, -7.5000, 11000, "~40 km NE, cruise",         300),
-        (34.2000, -7.0000, 11000, "~90 km NE, cruise",         600),
-        (35.5000, -6.0000, 10500, "~320 km NE, near horizon",  8000),
-        (33.5731, -7.5898, 500,   "overhead, low altitude",    400),
+        (40.0,   0.0,   10000, "overhead the network",          150),
+        (40.300, 0.090, 11000, "~40 km NE, cruise",             300),
+        (40.600, 0.500, 11000, "~90 km NE, cruise",             600),
+        (42.500, 2.000, 10500, "~320 km NE, near horizon",     8000),
+        (40.0,   0.0,     500, "overhead, low altitude",        400),
     ]
 
     print(f"{'case':28s} {'true position':>21s}  {'solved':>21s}  "
@@ -464,11 +476,11 @@ def demo() -> int:
     for err_s, label in [(1e-9, "1 ns rubidium"), (10e-9, "10 ns GPSDO"),
                          (100e-9, "100 ns GPSDO"), (1e-6, "1 us GPS"),
                          (1e-3, "1 ms NTP")]:
-        net2 = casablanca_network(clock_err_s=err_s)
-        tdoa = make_tdoa(net2, 33.70, -7.50, 10000,
+        net2 = demo_network(clock_err_s=err_s)
+        tdoa = make_tdoa(net2, 40.10, 0.10, 10000,
                          clock_noise_s=err_s, seed=3)
         fix = solve_fix(net2, tdoa, alt_known_m=10000)
-        e = fix.distance_km_from(33.70, -7.50) * 1000.0
+        e = fix.distance_km_from(40.10, 0.10) * 1000.0
         verdict = ("works" if e < 100 else
                    "marginal" if e < 1000 else
                    "useless")
@@ -487,12 +499,12 @@ def demo() -> int:
     ]
     for spacing, note in configs:
         net3 = ReceiverNetwork([
-            Receiver("C", 33.5731, -7.5898, 50.0, 10e-9),
-            Receiver("N", 33.5731 + spacing, -7.5898, 50.0, 10e-9),
-            Receiver("E", 33.5731, -7.5898 + spacing, 50.0, 10e-9),
-            Receiver("W", 33.5731, -7.5898 - spacing, 50.0, 10e-9),
+            Receiver("C", 0.0, 0.0, 50.0, 10e-9),
+            Receiver("N", 0.0 + spacing, 0.0, 50.0, 10e-9),
+            Receiver("E", 0.0, 0.0 + spacing, 50.0, 10e-9),
+            Receiver("W", 0.0, 0.0 - spacing, 50.0, 10e-9),
         ])
-        tdoa = make_tdoa(net3, 33.9, -7.4, 10000, clock_noise_s=10e-9, seed=4)
+        tdoa = make_tdoa(net3, 40.3, 0.2, 10000, clock_noise_s=10e-9, seed=4)
         fix = solve_fix(net3, tdoa, alt_known_m=10000)
         print(f"{net3.baseline_km():9.0f} km {fix.gdop:6.2f} "
               f"{fix.sigma_h_m:9.1f} m  {note}")
@@ -504,7 +516,7 @@ def demo() -> int:
 
 
 def network_report() -> int:
-    net = casablanca_network()
+    net = demo_network()
     print(net.describe())
     print(f"\nmax baseline: {net.baseline_km():.0f} km")
     print("\nFor comparison, a 1 kW X-band radar with a 1 m dish detects a")

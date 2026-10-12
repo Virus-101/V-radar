@@ -370,14 +370,14 @@ class SyntheticTracker(Tracker):
 
 if __name__ == "__main__":
     # quick self-check: synthetic tracker should populate and move
-    st = SyntheticTracker(33.5731, -7.5898, n=6)
+    st = SyntheticTracker(0.0, 0.0, n=6)
     st.start()
     time.sleep(1.5)
     snap = st.snapshot()
     print(f"synthetic tracks: {len(snap)}")
     for t in snap[:3]:
         print(f"  {t.icao} {t.callsign:8s} {t.altitude_ft:7.0f}ft "
-              f"{t.distance_km(33.5731, -7.5898):6.1f}km hdg={t.track_deg:5.1f}")
+              f"{t.distance_km(0.0, 0.0):6.1f}km hdg={t.track_deg:5.1f}")
     print("stats:", {k: (round(v, 1) if isinstance(v, float) else v)
                      for k, v in st.stats().items()})
     st.stop()

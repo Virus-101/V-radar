@@ -122,7 +122,7 @@ python monitor.py --file capture.txt --lat <your lat> --lon <your lon>
 **Step 3 — go live.**
 
 ```bash
-python monitor.py --rtl --lat 33.5731 --lon -7.5898
+python monitor.py --rtl --lat <your-lat> --lon <your-lon>
 ```
 
 **Step 4 — improve range.** In order of payoff:

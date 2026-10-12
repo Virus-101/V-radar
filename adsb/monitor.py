@@ -6,7 +6,7 @@ aircraft broadcast their own position and we decode it. Receiving 1090 MHz is
 unlicensed in every jurisdiction, so this is legal anywhere, including Morocco.
 
     python monitor.py --synthetic            # demo with no hardware
-    python monitor.py --lat 33.5731 --lon -7.5898
+    python monitor.py --lat 0.0 --lon 0.0
     python monitor.py --file capture.txt     # replay a recording
     python monitor.py --rtl                 # live RTL-SDR via rtl_adsb
 
@@ -314,9 +314,9 @@ class Monitor(tk.Tk):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--lat", type=float, default=33.5731,
-                    help="receiver latitude (default: Casablanca)")
-    ap.add_argument("--lon", type=float, default=-7.5898,
+    ap.add_argument("--lat", type=float, default=0.0,
+                    help="receiver latitude (default: 0,0 - set to your site)")
+    ap.add_argument("--lon", type=float, default=0.0,
                     help="receiver longitude")
     ap.add_argument("--synthetic", action="store_true",
                     help="generate demo traffic (no hardware)")

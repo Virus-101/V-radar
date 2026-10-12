@@ -78,6 +78,7 @@ check "position fusion"         "10/10 checks passed" adsb "$PY" position_fusion
 check "pps clock monitor"       "5/5 clock modes classified correctly" adsb \
       "$PY" pps_monitor.py --demo
 check "adsb receiver"           "ok"                 adsb  "$PY" receiver.py
+check "bringup (software side)" "software checks only" adsb "$PY" bringup.py --skip-dongle
 
 # ===========================================================================
 echo
